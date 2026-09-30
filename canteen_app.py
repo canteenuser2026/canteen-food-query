@@ -2,18 +2,17 @@ import streamlit as st
 import pandas as pd
 
 st.set_page_config(page_title="校园食堂菜品查询", layout="wide")
-st.title("🍙 校园食堂菜品查询小程序")
-st.subheader("快速查询食堂窗口、菜品、价格与口味评价")
+st.title("🍙 快速查询食堂窗口、菜品、价格与口味评价")
 st.info("💡 使用说明：可模糊搜索菜名、筛选窗口、价格区间、口味；还有随机干饭和收藏功能！")
 
 @st.cache_data
 def load_data():
     try:
         df = pd.read_csv("canteen.csv")
-        # 显示当前CSV真实表头（方便你核对！）
         st.caption(f"📌 当前CSV表头：{list(df.columns)}")
-        # 价格容错
+        # 重点！删掉“元”字，再转数字
         if "价格" in df.columns:
+            df["价格"] = df["价格"].astype(str).str.replace("元", "", regex=False)
             df["价格"] = pd.to_numeric(df["价格"], errors="coerce")
     except Exception:
         df = pd.DataFrame()
@@ -21,18 +20,16 @@ def load_data():
 
 df = load_data()
 
-# 安全取列：没有这一列就返回空Series
 def safe_col(df, name):
     if name in df.columns:
         return df[name]
     return pd.Series([], dtype="object")
 
-window_series = safe_col(df, "窗口")
-dish_series = safe_col(df, "菜名")
+window_series = safe_col(df, "窗口名称")
+dish_series = safe_col(df, "菜品")
 price_series = safe_col(df, "价格").dropna()
-taste_series = safe_col(df, "口味评价")
+taste_series = safe_col(df, "味道评价")
 
-# 价格区间
 if price_series.empty:
     min_p = 0.0
     max_p = 100.0
@@ -40,7 +37,6 @@ else:
     min_p = float(price_series.min())
     max_p = float(price_series.max())
 
-# 下拉列表安全生成
 window_list = sorted(window_series.dropna().unique().tolist())
 taste_list = sorted(taste_series.dropna().unique().tolist())
 
@@ -53,39 +49,28 @@ search_text = st.text_input("🔎 输入菜名关键词搜索")
 
 filter_df = df.copy()
 
-if selected_window and "窗口" in filter_df.columns:
-    filter_df = filter_df[filter_df["窗口"].isin(selected_window)]
-
-if selected_taste and "口味评价" in filter_df.columns:
-    filter_df = filter_df[filter_df["口味评价"].isin(selected_taste)]
-
+if selected_window and "窗口名称" in filter_df.columns:
+    filter_df = filter_df[filter_df["窗口名称"].isin(selected_window)]
+if selected_taste and "味道评价" in filter_df.columns:
+    filter_df = filter_df[filter_df["味道评价"].isin(selected_taste)]
 if "价格" in filter_df.columns:
-    filter_df = filter_df[
-        (filter_df["价格"] >= price_range[0]) &
-        (filter_df["价格"] <= price_range[1])
-    ]
-
-if search_text and "菜名" in filter_df.columns:
-    filter_df = filter_df[filter_df["菜名"].str.contains(search_text, na=False, case=False)]
+    filter_df = filter_df[(filter_df["价格"]>=price_range[0]) & (filter_df["价格"]<=price_range[1])]
+if search_text and "菜品" in filter_df.columns:
+    filter_df = filter_df[filter_df["菜品"].str.contains(search_text, na=False, case=False)]
 
 st.markdown(f"✅ 找到 {len(filter_df)} 道菜品")
 st.dataframe(filter_df.reset_index(drop=True), use_container_width=True)
 
-# 随机干饭
 if st.button("🎲 随机选一道干饭！"):
-    if not df.empty and "菜名" in df.columns:
-        valid = filter_df.dropna(subset=["菜名"])
-        if not valid.empty:
-            rand = valid.sample(1)
-            win = rand.iloc[0]["窗口"] if "窗口" in rand.columns else "未知"
-            pri = rand.iloc[0]["价格"] if "价格" in rand.columns else "未知"
-            st.success(f"今天吃：**{rand.iloc[0]['菜名']}**｜窗口：{win}｜¥{pri}")
-        else:
-            st.warning("没有可随机的菜品！")
+    valid = filter_df.dropna(subset=["菜品"])
+    if not valid.empty:
+        rand = valid.sample(1)
+        win = rand.iloc[0]["窗口名称"] if "窗口名称" in rand.columns else "未知"
+        pri = rand.iloc[0]["价格"] if "价格" in rand.columns else "未知"
+        st.success(f"今天吃：**{rand.iloc[0]['菜品']}**｜窗口：{win}｜¥{pri}")
     else:
-        st.warning("暂无菜品数据")
+        st.warning("没有可随机的菜品！")
 
-# 收藏
 if "fav" not in st.session_state:
     st.session_state.fav = []
 
